@@ -172,6 +172,9 @@ def create_camera():
         st.session_state.camera_image = None
         st.markdown("<h3 style='text-align: center; margin-top: 0;'>📸 点击相机下方的按钮（Take Photo）即可拍照</h3>",
                     unsafe_allow_html=True)
+        st.markdown("<h3 style='text-align: right; margin-top: 0;'>点击这下面的相机按钮可切换前后摄像头</h3>",
+
+                    unsafe_allow_html=True)
         st.session_state.camera_image = st.camera_input("相机实时画面")
         if st.session_state.camera_image is not None:
             st.session_state.uploader_key += 1  # 这里将上传图片的key改变，达到重置上传图片的目的
