@@ -1,0 +1,42 @@
+mode: paddle
+draw_threshold: 0.5
+metric: COCO
+use_dynamic_shape: true
+arch: PPYOLOE
+min_subgraph_size: 3
+Preprocess:
+- interp: 2
+  keep_ratio: true
+  target_size:
+  - 640
+  - 640
+  type: Resize
+- is_scale: true
+  mean:
+  - 0.485
+  - 0.456
+  - 0.406
+  std:
+  - 0.229
+  - 0.224
+  - 0.225
+  type: NormalizeImage
+- type: Permute
+- stride: 32
+  type: PadStride
+label_list:
+- black_blight-blister_blight
+- "\u8336\u9ED1\u67AF\u75C5"
+- "\u8336\u75B1\u72B6\u53F6\u67AF\u75C5"
+- "\u8336\u6811\u53F6\u67AF\u75C5"
+- "\u57FA\u56E0\u9057\u4F20\u6027\u75BE\u75C5"
+- "\u8336\u68A2\u67AF\u6B7B\u75C5"
+- "\u5065\u5EB7\u8336\u53F6"
+- "\u5730\u8863\u75C5"
+- "\u9541\u7F3A\u4E4F\u75C7"
+- Mita disease
+- "\u6C2E\u7F3A\u4E4F\u75C7"
+- "\u94BE\u7F3A\u4E4F\u75C7"
+- "\u7EA2\u9508\u75C5"
+- "\u786B\u7F3A\u4E4F\u75C7"
+- "\u65E5\u707C\u75C5"
