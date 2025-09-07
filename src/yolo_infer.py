@@ -29,6 +29,7 @@ def predict_image_use_resize(infer, ori_file, resize_file, dst_name, class_names
         print(f"检测到{class_name}置信度为{scores[i]:.2f}在{box}")
     # return get_base_dir() + "/data/pic/" + dst_name
     return result_img # cv2.cvtColor(result_img, cv2.COLOR_RGB2BGR)
+
 def preprocess(image_path):
     """
     使用letterbox方法进行预处理，保持宽高比

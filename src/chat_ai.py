@@ -128,7 +128,10 @@ def get_weather(city_name):
 
     response = requests.post(url, json=payload, headers=headers)
     # print(response.json()["content"][0]["text"]["data"])
-    return response.json()["content"][0]["text"]["data"].encode('gbk', errors='ignore').decode('gbk')
+    res_weather = response.json()["content"][0]["text"]["data"].encode('gbk', errors='ignore').decode('gbk')
+    res_weather = res_weather.split("随时随地 想查就查")[0][8:]
+    return res_weather
+
 
 if __name__ == '__main__':
     all_response = AllResponse()

@@ -3,6 +3,7 @@ import copy
 import json
 import random
 import time
+from copy import deepcopy
 from traceback import print_exc
 
 import streamlit as st
@@ -11,6 +12,7 @@ import cv2
 from .yolo_infer import InferYOLO, resize_image, predict_image, predict_image_use_resize
 from .chat_ai import *
 from .utils import *
+from .chat_ai_openai import OpenaiResponse
 from streamlit_modal import Modal
 
 def hidden():
@@ -166,12 +168,20 @@ def cache_model():
     infer = InferYOLO(model_dir=model_dir, class_names=class_names, use_gpu=False)
     return infer, class_names
 
+@st.cache_resource
+def cache_openai():
+    return OpenaiResponse()
+
 def create_camera():
     with st.session_state.modal.container():
         print_info("已打开modal")
         st.session_state.camera_image = None
-        st.markdown("<h3 style='text-align: center; margin-top: 0;'>📸 点击相机下方的按钮（Take Photo）即可拍照</h3>",
-                    unsafe_allow_html=True)
+        st.markdown(
+            "<h3 style='text-align: center; margin-top: 0;'>📸 点击相机下方的按钮（Take Photo）即可拍照</h3>"
+            "<p style='text-align: right; margin-top: 0;'>点击这下面的相机按钮可切换前后摄像头</p>",
+            unsafe_allow_html=True
+        )
+        print_info("存在更新相机组件")
         st.session_state.camera_image = st.camera_input("相机实时画面")
         if st.session_state.camera_image is not None:
             st.session_state.uploader_key += 1  # 这里将上传图片的key改变，达到重置上传图片的目的
@@ -209,24 +219,38 @@ def _create_button(msgs: list):
     # else:
     #     return False
 
-def get_response(prompt, model):
+def get_response(prompt, model, use_star=True):
+    """使用星河社区的模型"""
     if model == "联网Agent":
         # time.sleep(20)
         # return "test的无意义内容啊啊啊"
         retry = 0
         while retry < 5:
             try:
-                if st.session_state[f"upload_file_{st.session_state.uploader_key}"] is not None:
-                    if st.session_state.need_yolo:
-                        print_info("需要yolo")
-                        fileres = FileResponse(st.session_state.base_response, file=st.session_state[f"upload_file_{st.session_state.uploader_key}"])
+                now_img = _get_ont_img()
+                if now_img is not None:
+                    if not use_star:
+                        if st.session_state.need_yolo:
+                            print_info("需要yolo")
+                            fileres = FileResponse(st.session_state.base_response, file=now_img)
+                        else:
+                            fileres = FileResponse(st.session_state.base_response, "yolo_pic.jpg")
+                        print_info("fileres正常运行")
+                        response = fileres.get_response(prompt, st.session_state.location)
                     else:
-                        fileres = FileResponse(st.session_state.base_response, "yolo_pic.jpg")
-                    print_info("fileres正常运行")
-                    response = fileres.get_response(prompt, st.session_state.location)
+                        if st.session_state.need_yolo:
+                            print_info("需要yolo")
+                            response = cache_openai().process_tea_disease_image(prompt, st.session_state.location, file=now_img)
+                        else:
+                            response = cache_openai().process_tea_disease_image(prompt, st.session_state.location, file_path=get_base_dir() + "/data/pic/yolo_pic.jpg")
                 else:
-                    response = st.session_state.base_response.get_response(prompt, st.session_state.location)
-                print_info(response.json())
+                    if not use_star:
+                        response = st.session_state.base_response.get_response(prompt, st.session_state.location)
+                    else:
+                        response = cache_openai().only_text(prompt, st.session_state.location)
+                    # response = st.session_state.base_response.get_response(prompt, st.session_state.location)
+                if use_star:
+                    return response
                 return response.json()["answer"]
             except Exception as e:
                 print_exc()
@@ -290,6 +314,11 @@ def _reset_ss():
     st.session_state.camera_image = None
     print_info("已清空")
     st.rerun()
+
+def _read_pic(pic_name):
+    img_path = get_base_dir() + "/data/pic/" + pic_name
+    img = cv2.imread(img_path)
+    return deepcopy(img)
 
 def main_chat_dialog():
     st.markdown(
@@ -381,6 +410,8 @@ def main_chat_dialog():
         key="camera_modal",
         max_width=600
     )
+    if "yolo_pic" not in st.session_state:
+        st.session_state.yolo_pic = None
 
     with st.sidebar:
         uploader_container = st.empty()
@@ -469,7 +500,6 @@ def main_chat_dialog():
             st.session_state.in_process = True
             st.rerun()
 
-        yolo_pic_path = get_base_dir() + "/data/pic/" + "yolo_pic.jpg"
         assistant_message = st.chat_message("assistant", avatar=head_pic()["assistant"])
         now_img = _get_ont_img()
         if now_img is not None:
@@ -477,9 +507,14 @@ def main_chat_dialog():
             infer = cache_model()[0]
             user_pic_path, resize_path = _save_upload_file("user_upload.jpg", True)
             # predict_image(infer, "user_upload.jpg", "yolo_pic.jpg", conf_threshold=0.45)
-            img = predict_image_use_resize(infer, user_pic_path, resize_path, "yolo_pic.jpg", class_names=cache_model()[1], conf_threshold=0.5)
-            # st.session_state.need_yolo = False
-            assistant_message.image(img.copy())# yolo_pic_path)
+            st.session_state.yolo_pic = predict_image_use_resize(infer,
+                                                                 user_pic_path,
+                                                                 resize_path,
+                                                                 "yolo_pic.jpg",   # 暂时弃用的参数
+                                                                 class_names=cache_model()[1],
+                                                                 conf_threshold=0.7)
+            st.session_state.need_yolo = False
+            assistant_message.image(st.session_state.yolo_pic.copy())# yolo_pic_path)
             # st.session_state.upload_file = upload_file_path  # assistant_message.image(st.session_state.upload_file)
 
         #     st.session_state.upload_file = None
@@ -494,14 +529,14 @@ def main_chat_dialog():
             # with show1:
             #     insert_video()
             show2.markdown("<h2>大模型正在思考……</h2>", unsafe_allow_html=True)
-
+            print_info("等待输出中……")
             full_reply = get_response(st.session_state.prompt, st.session_state.select_model)
         assistant_message_placeholder.empty()  # 清空内容
 
         random_stream_text(assistant_message_placeholder, full_reply)
         st.session_state.messages.append({"role": "assistant", "content": full_reply})
         if now_img is not None:
-            st.session_state.messages[-1]["pic"] = now_img.copy()
+            st.session_state.messages[-1]["pic"] = st.session_state.yolo_pic
         st.session_state.disable_text_input = False
         st.session_state.in_process = False
         st.rerun()
