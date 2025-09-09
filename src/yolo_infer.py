@@ -22,11 +22,13 @@ def predict_image(infer, file_name, dst_name, class_names, conf_threshold=0.45):
 def predict_image_use_resize(infer, ori_file, resize_file, dst_name, class_names, conf_threshold=0.45):
     print_info("使用resize预测")
     result_img, boxes, scores, class_ids = infer.base_resize_predict(ori_file, resize_file, conf_threshold=conf_threshold)
-    # cv2.imwrite(get_base_dir() + "/data/pic/" + dst_name, cv2.cvtColor(result_img, cv2.COLOR_RGB2BGR))
-    for i, box in enumerate(boxes):
-        class_id = class_ids[i]
-        class_name = class_names[class_id] if class_id < len(class_names) else f"Class {class_id}"
-        print(f"检测到{class_name}置信度为{scores[i]:.2f}在{box}")
+    cv2.imwrite(get_base_dir() + "/data/pic/" + dst_name, cv2.cvtColor(result_img, cv2.COLOR_RGB2BGR))
+    with open(get_base_dir() + "/data/yolo_text.txt", "w", encoding="utf-8") as f:
+        for i, box in enumerate(boxes):
+            class_id = class_ids[i]
+            class_name = class_names[class_id] if class_id < len(class_names) else f"Class {class_id}"
+            print(f"检测到{class_name}置信度为{scores[i]:.2f}在{box}", file=f)
+            print(f"检测到{class_name}置信度为{scores[i]:.2f}在{box}")
     # return get_base_dir() + "/data/pic/" + dst_name
     return result_img # cv2.cvtColor(result_img, cv2.COLOR_RGB2BGR)
 
@@ -88,6 +90,7 @@ def preprocess(image_path):
 
     return img_input, scale_factor, img, preprocess_info
 
+
 def visualize_detection(image, boxes, scores, class_ids, class_names, scale_factor, threshold=0.5,
                                   font_path=None):
     """
@@ -134,7 +137,7 @@ def visualize_detection(image, boxes, scores, class_ids, class_names, scale_fact
     # 转换为PIL图像
     pil_img = Image.fromarray(cv2.cvtColor(img_copy, cv2.COLOR_BGR2RGB))
     draw = ImageDraw.Draw(pil_img)
-
+    res_box = []
     # 绘制每个检测结果
     for box, score, class_id in zip(boxes, scores, class_ids):
         if score < threshold:
@@ -179,6 +182,7 @@ def visualize_detection(image, boxes, scores, class_ids, class_names, scale_fact
         # 绘制矩形框
         cv2_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
         cv2.rectangle(cv2_img, (x1, y1), (x2, y2), color_bgr, 4)
+        res_box.append([x1, y1, x2, y2])
         pil_img = Image.fromarray(cv2.cvtColor(cv2_img, cv2.COLOR_BGR2RGB))
         draw = ImageDraw.Draw(pil_img)
 
@@ -217,7 +221,7 @@ def visualize_detection(image, boxes, scores, class_ids, class_names, scale_fact
         draw.text((label_x, label_y), label, fill=(255, 255, 255), font=font)
 
     result_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
-    return result_img
+    return result_img, res_box
 
 
 def visualize_middle(input_image, boxes, scores, class_ids, class_names, threshold=0.5,
@@ -388,6 +392,7 @@ def box_iou(box1, box2, score1, score2, thereshould=0.5):
             return box2  # 代表了列表中的box会被删掉
         return False  # 代表当前的box会被删掉
     return True  # 代表save
+
 class InferYOLO:
     def __init__(self, model_dir, class_names, use_gpu=False):
         """
@@ -584,7 +589,7 @@ class InferYOLO:
 
         # Visualize detections
         print_info("将会打框的图片为", original_img.shape)
-        result_img = visualize_detection(
+        result_img, res_box = visualize_detection(
             original_img,  # 这里输入原始图像进行打标注
             boxes,
             scores,
@@ -595,4 +600,4 @@ class InferYOLO:
             get_base_dir() + "/data/chinese.otf"  # 中文字体路径
         )
         print_info("最后图片的shape为", result_img.shape)
-        return result_img, boxes, scores, class_ids
+        return result_img, res_box, scores, class_ids

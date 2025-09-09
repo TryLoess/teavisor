@@ -1,21 +1,27 @@
 import asyncio
 import copy
-import json
+import os.path
 import random
+import shutil
+import subprocess
 import time
 from copy import deepcopy
 from traceback import print_exc
 
-import streamlit as st
 import cv2
-
-from .yolo_infer import InferYOLO, resize_image, predict_image, predict_image_use_resize
-from .chat_ai import *
-from .utils import *
-from .chat_ai_openai import OpenaiResponse
+import streamlit as st
 from streamlit_modal import Modal
 
+from .chat_ai import *
+from .chat_ai_openai import OpenaiResponse
+from .config import *
+from .utils import *
+from .voice import *
+from .yolo_infer import InferYOLO, resize_image, predict_image_use_resize
+
+
 def hidden():
+    os.environ["PATH"] += os.pathsep + get_base_dir() + "/data/ffmpeg"  # 让pydub可以找到ffmpeg
     hide_st_style = """
                 <style>
                 #MainMenu {visibility: hidden;}
@@ -88,6 +94,8 @@ def random_stream_text(ai, text, speed_range=(0.002, 0.06)):
         total += char
         ai.write(total)  # 模拟流式输出
         time.sleep(random.uniform(min_speed, max_speed))  # 异步睡眠
+        # 这个是线程阻塞的
+
 
 def create_select_model():
     st.markdown("""
@@ -222,8 +230,8 @@ def _create_button(msgs: list):
 def get_response(prompt, model, use_star=True):
     """使用星河社区的模型"""
     if model == "联网Agent":
-        # time.sleep(20)
-        # return "test的无意义内容啊啊啊"
+        # time.sleep(5)
+        # return "test的无意义内容,请忽略，我只是用来占位的，请稍等片刻，我马上就好，谢谢，你好棒，继续加油！我会变得更好！你也会的！诶嘿嘿，么么哒"
         retry = 0
         while retry < 5:
             try:
@@ -240,9 +248,9 @@ def get_response(prompt, model, use_star=True):
                     else:
                         if st.session_state.need_yolo:
                             print_info("需要yolo")
-                            response = cache_openai().process_tea_disease_image(prompt, st.session_state.location, file=now_img)
+                            response = cache_openai().cloud_process_big_small(prompt, st.session_state.location, file=now_img)
                         else:
-                            response = cache_openai().process_tea_disease_image(prompt, st.session_state.location, file_path=get_base_dir() + "/data/pic/yolo_pic.jpg")
+                            response = cache_openai().cloud_process_big_small(prompt, st.session_state.location, file_path=get_base_dir() + "/data/pic/yolo_pic.jpg", yolo_text_file=get_base_dir() + "/data/yolo_text.txt")
                 else:
                     if not use_star:
                         response = st.session_state.base_response.get_response(prompt, st.session_state.location)
@@ -260,20 +268,20 @@ def get_response(prompt, model, use_star=True):
     else:
         return "当前模型还在微调，未来将会接入该网站~请先调整回联网Agent模式进行使用"
 
-def insert_video():
-    file_path = get_base_dir() + "/data/loading.mp4"
-
-    gif_html = f"""
-    <div style="display: flex; justify-content: center; align-items: center;">
-        <video autoplay loop muted playsinline style="pointer-events: none;">
-            <source src="{file_path}"type="video/mp4">
-            你的设备不支持该加载动画
-        </video>
-    </div>
-    """
-
-    # 通过 markdown 插入 HTML
-    st.markdown(gif_html, unsafe_allow_html=True)
+# def insert_video():
+#     file_path = get_base_dir() + "/data/loading.mp4"
+#
+#     gif_html = f"""
+#     <div style="display: flex; justify-content: center; align-items: center;">
+#         <video autoplay loop muted playsinline style="pointer-events: none;">
+#             <source src="{file_path}"type="video/mp4">
+#             你的设备不支持该加载动画
+#         </video>
+#     </div>
+#     """
+#
+#     # 通过 markdown 插入 HTML
+#     st.markdown(gif_html, unsafe_allow_html=True)
 # def _save_upload_file(save_pic_name, resize=False):
 #     assert st.session_state[f"upload_file_{st.session_state.uploader_key}"] is not None, "上传文件不能为空才对，有问题"
 #     image = Image.open(st.session_state[f"upload_file_{st.session_state.uploader_key}"])
@@ -320,66 +328,17 @@ def _read_pic(pic_name):
     img = cv2.imread(img_path)
     return deepcopy(img)
 
+def clean_voice():
+    print_info("正在清空语音文件夹")
+    if os.path.exists(get_base_dir() + "/data/voice"):
+        shutil.rmtree(get_base_dir() + "/data/voice")
+    if os.path.exists(get_base_dir() + "/data/voice/output_all.wav"):
+        os.remove(get_base_dir() + "/data/voice/output_all.wav")
+    os.makedirs(get_base_dir() + "/data/voice", exist_ok=True)
+
 def main_chat_dialog():
     st.markdown(
-        """
-        <style>
-        .loading_gif{
-          display: flex;
-          justify-content: center; /* 水平居中 */
-          align-items: center;     /* 垂直居中（如果需要） */
-          margin-top: 16px;        /* 内容与图片间距 */
-        }
-        .loading_gif img{
-          max-width: 80%;
-          height: auto;
-          display: block;
-        }
-        /* 用户消息样式 - 让消息容器成为 flex 容器 */
-        .stChatMessage:has([aria-label="Chat message from user"]) {
-          display: flex;
-          flex-direction: row-reverse; /* 反转排列，将头像放在右侧 */
-          align-items: flex-start; /* 顶部对齐 */
-          justify-content: flex-end; /* 内容靠右 */
-          gap: 3px; /* 头像与消息之间的间距 */
-        }
-        
-        /* 头像图片样式 */
-        .stChatMessage:has([aria-label="Chat message from user"]) > img[alt="user avater"] {
-          width: 40px; /* 头像固定宽度 */
-          height: 40px; /* 头像固定高度 */
-          order: 1; /* 控制 flex 布局中的顺序 */
-        }
-        
-        .stChatMessage:has([aria-label="Chat message from user"]) div {
-          flex: 1; /* 占满剩余空间 */
-          display: flex;
-          justify-content: flex-end; /* 内容靠右 */
-        }
-        
-        /* 保证消息中的图片大小合适 */
-        .stChatMessage:has([aria-label="Chat message from user"]) img {
-          max-width: 40% !important; /* 限制图片最大宽度 */
-          display: block;
-            margin-left: auto;   /* 让图片靠右 */
-            margin-right: 0;     /* 保证右边没有多余间距 */
-        }
-            
-        /* Optional: Style the video elements */
-        [data-testid="stVideo"] {
-          pointer-events: none;
-          overflow: hidden;
-        }
-        # .stMain div[data-testid="stHorizontalBlock"] {
-        #     position: fixed; /* 或 absolute，根据需求选择 */
-        #     bottom: 5%;
-        #     left: calc(415px * var(--sidebar-width-state, 1));
-        #     right: 0;
-        #     width: calc(100% - 415px * var(--sidebar-width-state, 1));
-        #     z-index: 1000; /* 保证元素在页面最顶层 */
-        # }
-        </style>
-        """,
+        CSS,
         unsafe_allow_html=True
     )
     if "messages" not in st.session_state:
@@ -410,10 +369,15 @@ def main_chat_dialog():
         key="camera_modal",
         max_width=600
     )
+    if "write" not in st.session_state:
+        st.session_state.write = False
     if "yolo_pic" not in st.session_state:
         st.session_state.yolo_pic = None
+    if "user_voice" not in st.session_state:
+        st.session_state.user_voice = ""
 
     with st.sidebar:
+
         uploader_container = st.empty()
         col1, col2 = uploader_container.columns([1, 1])
         if st.session_state.show_uploader:
@@ -467,6 +431,8 @@ def main_chat_dialog():
         if "pic" in msg.keys():
             role.image(msg["pic"])
         role.write(msg["content"])
+        if "audio" in msg.keys():
+            role.audio(msg["audio"], format="audio/wav")
 
     st.session_state.disable_text_input = False if st.session_state.location != "" else True
     if st.session_state.location != "" :
@@ -475,16 +441,40 @@ def main_chat_dialog():
         disable_text = "请先在侧边栏配置位置，再来输入问题可以获得更加准确的结果哦~"
     if st.session_state.in_process:
         disable_text = "现在正在运行，请等待运行结束再进行输入~"
- # , accept_file=True, type=["png", "jpg", "jpeg"])
+    with st.container():
+        if st.session_state.write:
+            col_11, col22, _ = st.columns([0.15, 0.99, 0.01])
+            st.session_state.prompt = col22.chat_input(disable_text,
+                                   disabled=st.session_state.disable_text_input or st.session_state.in_process,
+                                   on_submit=_disable_chat_input,
+                                   key="chat_input")
+        else:
+            col_11, col22, col33 = st.columns([0.15, 0.7, 0.3])
+            with col22:
+                if st.button("摁下开始录音",
+                                 help=disable_text,
+                                 disabled=st.session_state.disable_text_input or st.session_state.in_process,
+                                 use_container_width=True,
+                                 ):
+                    st.session_state.user_voice = voice_main_write()
+            with col33:
+                if st.button("上传",
+                              disabled=st.session_state.disable_text_input or st.session_state.in_process or st.session_state.user_voice == "",
+                              use_container_width=True,
+                              on_click=_disable_chat_input()):
+                    st.session_state.prompt = st.session_state.user_voice
+                    st.session_state.user_voice = ""
+        with col_11:
+            mode = "切换语音输入" if st.session_state.write else "切换文字输入"
+            if st.button(mode, disabled=st.session_state.in_process, use_container_width=True):
+                st.session_state.write = not st.session_state.write
+                st.rerun()
 
+    if st.session_state.prompt or st.session_state.in_process:
 
-    # 获取用户输入
-    if (prompt := st.chat_input(disable_text,
-                           disabled=st.session_state.disable_text_input or st.session_state.in_process,
-                           on_submit=_disable_chat_input)) or st.session_state.in_process:
         if not st.session_state.in_process:
-
-            st.session_state.messages.append({"role": "user", "content": prompt})
+            clean_voice()  # TODO:这里清空语音文件夹，可以删除
+            st.session_state.messages.append({"role": "user", "content": st.session_state.prompt})
             # user = st.chat_message("user", avatar=head_pic()["user"])
             # with user:
             #     if st.session_state.upload_file is not None:
@@ -495,11 +485,8 @@ def main_chat_dialog():
             now_img = _get_ont_img()
             if now_img is not None:
                 st.session_state.messages[-1]["pic"] = copy.deepcopy(now_img)
-
-            st.session_state.prompt = prompt
             st.session_state.in_process = True
             st.rerun()
-
         assistant_message = st.chat_message("assistant", avatar=head_pic()["assistant"])
         now_img = _get_ont_img()
         if now_img is not None:
@@ -510,7 +497,7 @@ def main_chat_dialog():
             st.session_state.yolo_pic = predict_image_use_resize(infer,
                                                                  user_pic_path,
                                                                  resize_path,
-                                                                 "yolo_pic.jpg",   # 暂时弃用的参数
+                                                                 "yolo_pic.jpg",
                                                                  class_names=cache_model()[1],
                                                                  conf_threshold=0.7)
             st.session_state.need_yolo = False
@@ -531,17 +518,40 @@ def main_chat_dialog():
             show2.markdown("<h2>大模型正在思考……</h2>", unsafe_allow_html=True)
             print_info("等待输出中……")
             full_reply = get_response(st.session_state.prompt, st.session_state.select_model)
+        with open(get_base_dir() + "/data/voice/ori_text.txt", "w", encoding="utf-8") as f:
+            f.write(full_reply)
+        process = subprocess.Popen(
+            f'python -m src.voice "ori_text.txt"',
+            cwd=get_base_dir(),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        # print_info("标准输出:", result.stdout)
+        # print_info("标准错误:", result.stderr)
+        # print_info("退出码:", result.returncode)
         assistant_message_placeholder.empty()  # 清空内容
 
         random_stream_text(assistant_message_placeholder, full_reply)
+
+        voice_assistant = assistant_message.empty()
+        while True:
+            if os.path.exists(get_base_dir() + "/data/voice/output_all.wav"):
+                voice_assistant.empty()  # 清空内容
+                break
+            else:
+                voice_assistant.info("正在生成语音播报，请稍等")
+            time.sleep(5)
+        voice_assistant.audio(get_all_voice(), format="audio/wav")
         st.session_state.messages.append({"role": "assistant", "content": full_reply})
         if now_img is not None:
             st.session_state.messages[-1]["pic"] = st.session_state.yolo_pic
+        st.session_state.messages[-1]["audio"] = deepcopy(get_all_voice())
         st.session_state.disable_text_input = False
         st.session_state.in_process = False
+        st.session_state.prompt = ""
         st.rerun()
         # st.session_state.messages.append({"role": "assistant", "content": full_reply})
-    # pointer - events: none;
 
     if not st.session_state.messages:
         st.markdown("""

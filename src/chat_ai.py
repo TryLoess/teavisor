@@ -132,6 +132,25 @@ def get_weather(city_name):
     res_weather = res_weather.split("随时随地 想查就查")[0][8:]
     return res_weather
 
+def get_search(content):
+    url = "https://qianfan.baidubce.com/v2/ai_search/chat/completions"
+    api_key = "bce-v3/ALTAK-DOynWVfMBaSDMXJYX5b7G/149ab2715d4a1f6940d401961e7d835b59a113cc"  # 替换为你的API Key
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    data = {
+        "messages": [
+            {
+                "content": content,
+                "role": "user"
+            }
+        ],
+        "resource_type_filter": [{"type": "web", "top_k": 10}],
+    }
+    response = requests.post(url, headers=headers, json=data)
+    # print(response.status_code)
+    return response.text
 
 if __name__ == '__main__':
     all_response = AllResponse()

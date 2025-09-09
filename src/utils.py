@@ -6,6 +6,35 @@ from PIL import Image
 import io
 import numpy as np
 
+def split_str_length(ori_text, max_len=59):
+    chinese_punctuations = [
+        "。", "，", "；", "：", "？", "！",
+        """, """, "「", "」", "《", "》",
+        "、", "．", "…", "·", "—", "～",
+        "（", "）", "【", "】", "［", "］"
+    ]
+
+    # 按标点符号拆分文本
+    segments = []
+    current_segment = ""
+
+    for char in ori_text:
+        current_segment += char
+
+        # 如果当前字符是标点符号或当前段落即将超过长度限制
+        if len(current_segment) >= max_len:
+            for rechar in reversed(current_segment):
+                if rechar in chinese_punctuations:
+                    split_index = current_segment.rfind(rechar) + 1
+                    segments.append(current_segment[:split_index])
+                    current_segment = current_segment[split_index:]
+                    break
+
+    # 添加最后一个段落（如果有）
+    if current_segment:
+        segments.append(current_segment)
+    return segments
+
 def get_img_base64(file_name: str) -> str:
     """
     基于data/pic下的图片，进行base64编码
