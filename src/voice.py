@@ -7,6 +7,7 @@ import sys
 import wave
 
 import markdown
+import numpy as np
 import streamlit as st
 import speech_recognition as sr
 from bs4 import BeautifulSoup
@@ -14,7 +15,6 @@ from bs4 import BeautifulSoup
 from .utils import get_base_dir, print_info, split_str_length
 from .config import *
 import requests
-from pydub import AudioSegment
 import argparse
 
 
@@ -66,10 +66,30 @@ def voice_main_write():
         try:
             audio_data, temp_window = asyncio.run(m_receive(recognizer, source))
             audio_bytes = audio_data.get_wav_data()
-            audio_segment = AudioSegment.from_file(io.BytesIO(audio_bytes), format="wav")
-            louder_audio = audio_segment + 20  # 数值可以根据需要调整
+
+            # 使用wave模块读取音频数据
+            with wave.open(io.BytesIO(audio_bytes), 'rb') as wf:
+                # 获取音频参数
+                n_channels = wf.getnchannels()
+                sample_width = wf.getsampwidth()
+                framerate = wf.getframerate()
+                n_frames = wf.getnframes()
+                # 读取原始音频数据
+                audio_data = wf.readframes(n_frames)
+
+            # 将音频数据转换为numpy数组进行处理
+            audio_array = np.frombuffer(audio_data, dtype=np.int16)
+            # 增加音量（乘以1.5相当于增加约3.5dB，可以根据需要调整）
+            louder_audio_array = np.clip(audio_array * 1.5, -32768, 32767).astype(np.int16)
+
+            # 将处理后的数据写入新的BytesIO对象
             buffer = io.BytesIO()
-            louder_audio.export(buffer, format="wav")
+            with wave.open(buffer, 'wb') as wf:
+                wf.setnchannels(n_channels)
+                wf.setsampwidth(sample_width)
+                wf.setframerate(framerate)
+                wf.writeframes(louder_audio_array.tobytes())
+
             buffer.seek(0)
 
             audio_path = get_base_dir() + "/test.wav"
