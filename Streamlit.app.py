@@ -33,7 +33,7 @@ def main():
         #     margin-bottom: 0px;
         # }
         [data-testid="stSidebar"][aria-expanded="true"] {
-            min-width: 28% !important;
+            min-width: 29% !important;
         }
 
         /* 侧边栏收回状态不设置最小宽度限制 */
