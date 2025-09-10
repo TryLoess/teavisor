@@ -170,10 +170,12 @@ def voice_main_return(file_name, max_len=59):
         ori_text = f.read()
     ori_text = markdown_to_text(ori_text)
     segments = split_str_length(ori_text, max_len=max_len)
+    print_info("一共有：", len(segments))
     # 为每个段落生成语音文件
     for i, segment in enumerate(segments):
         file_name = f"output_{i}.wav"
         _voice_main_return(segment, file_name)
+    print_info("所有片段语音合成完成，开始合并...")
     _merge()
 
 
