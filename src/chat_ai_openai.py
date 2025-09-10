@@ -26,8 +26,14 @@ def base64_encode(file_path=None, file=None):
         except Exception as e:
             return f"错误: 读取图片文件失败 - {str(e)}"
 
-    elif file is not None and isinstance(file, UploadedFile):
-        file_bytes = file.read()
+    elif file is not None:
+        if isinstance(file, UploadedFile):
+            file_bytes = file.read()
+        elif isinstance(file, bytes):
+            file_bytes = file
+        else:
+            print_info(type(file))
+            raise ValueError("file参数必须是UploadedFile或bytes类型")
         base64_img = base64.b64encode(file_bytes).decode("utf-8")
         file_ext = "jpg"
     else:
@@ -151,15 +157,15 @@ class OpenaiResponse:
             return f"API调用错误: {str(e)}"
 
 
-    def cloud_process_big_small(self, user_ask, city, file_path=None, file=None, yolo_text_file=None):
+    def cloud_process_big_small(self, user_ask, city, file_path=None, file=None, yolo_text_file=None, yolo_text=None):
         """
         输入文件位置，转换base64并进行图文理解
         """
-        if yolo_text_file is not None:
+        if yolo_text_file is not None and yolo_text is None:
             with open(yolo_text_file, "r", encoding="utf-8") as f:
                 yolo_text = f.read().strip()
 
-        print_info(user_ask, city, yolo_text_file)
+        print_info(user_ask, city, yolo_text)
         vl_response = self.process_tea_disease_image("""请根据系统提示词的病情表格，尽可能详细描述图片中的内容，以帮助文本大模型更好的理解当前发生的病虫害种类与状况。
                                                      你需要将输出的内容分为两行，第一行指明当前病虫害是什么，其他内容均不要输出，第二行开始阐述当前病虫害发生的状况。无关内容均不要输出
                                                      """ + (f"yolo标注结果为:{yolo_text}，如果你觉得结果不对，请进行反驳的证明" if yolo_text is not None else ""),

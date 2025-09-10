@@ -17,7 +17,7 @@ from .chat_ai_openai import OpenaiResponse
 from .config import *
 from .utils import *
 from .voice import _merge, get_all_voice, voice_main_return_async, voice_main_write, on_complete
-from .yolo_infer import InferYOLO, resize_image, predict_image_use_resize
+from .yolo_infer import InferYOLO, resize_image, predict_image_use_resize, buffer_decode
 
 
 def hidden():
@@ -95,13 +95,15 @@ def random_stream_text(ai, text, speed_range=(0.002, 0.06)):
         time.sleep(random.uniform(min_speed, max_speed))  # 异步睡眠
         # 这个是线程阻塞的
 
-async def get_all_task(ai, text, file_name="ori_text.txt", speed_range=(0.002, 0.06), max_len=60):    # 创建两个任务并等待它们都完成
-    task1 = asyncio.create_task(voice_main_return_async(file_name, max_len, on_complete))
+async def get_all_task(ai, text, speed_range=(0.002, 0.06), max_len=60):    # 创建两个任务并等待它们都完成
+    task1 = asyncio.create_task(voice_main_return_async(text, max_len, on_complete))
     task2 = asyncio.create_task(random_stream_text_async(ai, text, speed_range))
 
-    # 等待所有任务完成
+    done, pending = await asyncio.wait([task1, task2], return_when=asyncio.FIRST_COMPLETED)
+    if task2 in done and task1 not in done:
+        st.info("语音生成中，请稍候……")
     results = await asyncio.gather(task1, task2)
-    return all(results)  # 如果所有任务都成功返回True，否则返回False
+    return results[0]
 
 def create_select_model():
     st.markdown("""
@@ -256,7 +258,7 @@ def get_response(prompt, model, use_star=True):
                             print_info("需要yolo")
                             response = cache_openai().cloud_process_big_small(prompt, st.session_state.location, file=now_img)
                         else:
-                            response = cache_openai().cloud_process_big_small(prompt, st.session_state.location, file_path=get_base_dir() + "/data/pic/yolo_pic.jpg", yolo_text_file=get_base_dir() + "/data/yolo_text.txt")
+                            response = cache_openai().cloud_process_big_small(prompt, st.session_state.location, file=st.session_state.yolo_pic, yolo_text=st.session_state.yolo_text)
                 else:
                     if not use_star:
                         response = st.session_state.base_response.get_response(prompt, st.session_state.location)
@@ -381,6 +383,8 @@ def main_chat_dialog():
         st.session_state.yolo_pic = None
     if "user_voice" not in st.session_state:
         st.session_state.user_voice = ""
+    if "yolo_text" not in st.session_state:
+        st.session_state.yolo_text = None
 
     with st.sidebar:
 
@@ -506,14 +510,14 @@ def main_chat_dialog():
             infer = cache_model()[0]
             user_pic_path, resize_path = _save_upload_file("user_upload.jpg", True)
             # predict_image(infer, "user_upload.jpg", "yolo_pic.jpg", conf_threshold=0.45)
-            st.session_state.yolo_pic = predict_image_use_resize(infer,
+            st.session_state.yolo_pic, st.session_state.yolo_text = predict_image_use_resize(infer,
                                                                  user_pic_path,
                                                                  resize_path,
-                                                                 "yolo_pic.jpg",
+                                                                 "",    # 暂时弃用
                                                                  class_names=cache_model()[1],
                                                                  conf_threshold=0.7)
             st.session_state.need_yolo = False
-            assistant_message.image(st.session_state.yolo_pic.copy())# yolo_pic_path)
+            assistant_message.image(st.session_state.yolo_pic)# yolo_pic_path)
             # st.session_state.upload_file = upload_file_path  # assistant_message.image(st.session_state.upload_file)
 
         #     st.session_state.upload_file = None
@@ -531,10 +535,10 @@ def main_chat_dialog():
             print_info("等待输出中……输入为", st.session_state.prompt)
             full_reply = get_response(st.session_state.prompt, st.session_state.select_model)
         print_info(os.path.exists(get_base_dir() + "/data/voice/ori_text.txt"))
-        with open(get_base_dir() + "/data/voice/ori_text.txt", "w", encoding="utf-8") as f:
-            f.write(full_reply)
-        print_info(os.path.exists(get_base_dir() + "/data/voice/ori_text.txt"))
-        print_info("已写入文本，开始生成语音")
+        # with open(get_base_dir() + "/data/voice/ori_text.txt", "w", encoding="utf-8") as f:
+        #     f.write(full_reply)
+        # print_info(os.path.exists(get_base_dir() + "/data/voice/ori_text.txt"))
+        # print_info("已写入文本，开始生成语音")
         # process = subprocess.Popen(
         #     f'python -m src.voice "ori_text.txt"',
         #     cwd=get_base_dir(),
@@ -545,31 +549,32 @@ def main_chat_dialog():
         # print_info("标准错误:", result.stderr)
         # print_info("退出码:", result.returncode)
         assistant_message_placeholder.empty()  # 清空内容
-        asyncio.run(get_all_task(assistant_message_placeholder, full_reply, "ori_text.txt"))
+        audio = asyncio.run(get_all_task(assistant_message_placeholder, full_reply))
 
 
         # random_stream_text(assistant_message_placeholder, full_reply)
 
         voice_assistant = assistant_message.empty()
-        length = len(split_str_length(full_reply))
-        while True:
-            if os.path.exists(get_base_dir() + "/data/voice/output_all.wav"):
-                voice_assistant.empty()  # 清空内容
-                break
-            else:
-                voice_list = [i for i in os.listdir(get_base_dir() + "/data/voice") if i.endswith(".wav") and i != "output_all.wav"]
-                if len(voice_list) == length:
-                    _merge()  # 如果够了直接合并音频
-                    break
-                else:
-                    voice_assistant.empty()
-                    voice_assistant.info(f"正在生成语音...已完成{len(voice_list)}/{length}")
-            time.sleep(5)
-        voice_assistant.audio(get_all_voice(), format="audio/wav")
+        # length = len(split_str_length(full_reply))
+        # while True:
+        #     if os.path.exists(get_base_dir() + "/data/voice/output_all.wav"):
+        #         voice_assistant.empty()  # 清空内容
+        #         break
+        #     else:
+        #         voice_list = [i for i in os.listdir(get_base_dir() + "/data/voice") if i.endswith(".wav") and i != "output_all.wav"]
+        #         if len(voice_list) == length:
+        #             _merge()  # 如果够了直接合并音频
+        #             break
+        #         else:
+        #             voice_assistant.empty()
+        #             voice_assistant.info(f"正在生成语音...已完成{len(voice_list)}/{length}")
+        #     time.sleep(5)
+
+        voice_assistant.audio(deepcopy(audio), format="audio/wav")
         st.session_state.messages.append({"role": "assistant", "content": full_reply})
         if now_img is not None:
             st.session_state.messages[-1]["pic"] = st.session_state.yolo_pic
-        st.session_state.messages[-1]["audio"] = deepcopy(get_all_voice())
+        st.session_state.messages[-1]["audio"] = deepcopy(audio)
         st.session_state.disable_text_input = False
         st.session_state.in_process = False
         st.session_state.prompt = ""

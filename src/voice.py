@@ -11,6 +11,7 @@ import numpy as np
 import streamlit as st
 import speech_recognition as sr
 from bs4 import BeautifulSoup
+from streamlit import audio
 
 from .utils import get_base_dir, print_info, split_str_length
 from .config import *
@@ -108,7 +109,7 @@ def voice_main_write():
         except sr.RequestError as e:
             st.error(f"语音识别服务出错: {e}")
 
-def _voice_main_return(tex, file_name):
+def _voice_main_return(tex, file_name=None):
     """tex结果要小于60"""
     access_token = _get_baidu_access_token()
     cloud_url = "http://tsn.baidu.com/text2audio"
@@ -128,11 +129,12 @@ def _voice_main_return(tex, file_name):
     response = requests.post(cloud_url, params=ex_params)
     print_info(response.status_code)
     print_info(response.headers)
-    if not os.path.exists(get_base_dir() + f"/data/voice"):
-        os.mkdir(get_base_dir() + f"/data/voice")
-    with open(get_base_dir() + f"/data/voice/{file_name}", "wb") as f:
-        f.write(response.content)
-    print_info(f"输出音频已保存至data/voice/{file_name}")
+    if file_name is not None:
+        if not os.path.exists(get_base_dir() + f"/data/voice"):
+            os.mkdir(get_base_dir() + f"/data/voice")
+        with open(get_base_dir() + f"/data/voice/{file_name}", "wb") as f:
+            f.write(response.content)
+        print_info(f"输出音频已保存至data/voice/{file_name}")
     return response.content
 
 def _merge(voice_dir=get_base_dir() + "/data/voice", dst_path=get_base_dir() + "/data/voice/output_all.wav"):
@@ -153,6 +155,25 @@ def _merge(voice_dir=get_base_dir() + "/data/voice", dst_path=get_base_dir() + "
             out_wav.writeframes(f)
     print_info(f"合并后的音频已保存至{dst_path}")
 
+def voice_merge(wav_files):
+    print_info("开始合并音频文件...")
+    frames = []
+    params = None
+    for idx, file in enumerate(wav_files):
+        with wave.open(io.BytesIO(file), "rb") as w:
+            if idx == 0:
+                params = w.getparams()
+            frames.append(w.readframes(w.getnframes()))
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as out_wav:
+        out_wav.setparams(params)
+        for f in frames:
+            out_wav.writeframes(f)
+    buffer.seek(0)  # 重置指针到开始位置
+    audio_data = buffer.read()  # 读取所有数据到变量中
+    return audio_data
+
+
 def get_all_voice(dst_path=get_base_dir() + "/data/voice/output_all.wav"):
     with open(dst_path, "rb") as f:
         return f.read()
@@ -163,42 +184,76 @@ def markdown_to_text(md_text):
     text = soup.get_text(separator='\n')
     return text
 
-def voice_main_return(file_name, max_len=59):
+# def voice_main_return(file_name, max_len=59):
+#     """将文本按中文标点符号拆分，确保每段不超过最大长度限制，最后返回所有音频的二进制拼接结果"""
+#     # 常用中文标点符号列表
+#     with open(get_base_dir() + f"/data/voice/{file_name}", "r", encoding="utf-8") as f:
+#         ori_text = f.read()
+#     ori_text = markdown_to_text(ori_text)
+#     segments = split_str_length(ori_text, max_len=max_len)
+#     print_info("一共有：", len(segments))
+#     # 为每个段落生成语音文件
+#     for i, segment in enumerate(segments):
+#         file_name = f"output_{i}.wav"
+#         _voice_main_return(segment, file_name)
+#     print_info("所有片段语音合成完成，开始合并...")
+#     _merge()
+
+def voice_main_return(ori_text, max_len=59):
     """将文本按中文标点符号拆分，确保每段不超过最大长度限制，最后返回所有音频的二进制拼接结果"""
     # 常用中文标点符号列表
-    with open(get_base_dir() + f"/data/voice/{file_name}", "r", encoding="utf-8") as f:
-        ori_text = f.read()
     ori_text = markdown_to_text(ori_text)
     segments = split_str_length(ori_text, max_len=max_len)
     print_info("一共有：", len(segments))
+    wav_files = []
     # 为每个段落生成语音文件
     for i, segment in enumerate(segments):
-        file_name = f"output_{i}.wav"
-        _voice_main_return(segment, file_name)
+        # file_name = f"output_{i}.wav"
+        wav_files.append(_voice_main_return(segment))
+
     print_info("所有片段语音合成完成，开始合并...")
-    _merge()
+    return voice_merge(wav_files)
 
-
-async def voice_main_return_async(file_name, max_len=59, callback=None):
+# async def voice_main_return_async(file_name, max_len=59, callback=None):
+#     """异步执行语音合成任务"""
+#     try:
+#         # 使用 asyncio.to_thread 将同步函数转为异步执行
+#         if int(sys.version.split(".")[1]) >= 9:  # Python 3.9+支持to_thread
+#             await asyncio.to_thread(voice_main_return, file_name, max_len)
+#         else:  # 3.8及以下版本使用run_in_executor
+#             loop = asyncio.get_running_loop()
+#             ctx = contextvars.copy_context()
+#             func_call = functools.partial(ctx.run, voice_main_return, file_name, max_len)
+#             await loop.run_in_executor(None, func_call)
+#
+#         if callback:
+#             await on_complete(True)
+#             return True
+#     except Exception as e:
+#         print_info(f"语音合成失败: {e}")
+#         if callback:
+#             await on_complete(False, str(e))
+#         return False
+async def voice_main_return_async(ori_text, max_len=59, callback=None):
     """异步执行语音合成任务"""
     try:
         # 使用 asyncio.to_thread 将同步函数转为异步执行
         if int(sys.version.split(".")[1]) >= 9:  # Python 3.9+支持to_thread
-            await asyncio.to_thread(voice_main_return, file_name, max_len)
+            audio_data = await asyncio.to_thread(voice_main_return, ori_text, max_len)
         else:  # 3.8及以下版本使用run_in_executor
             loop = asyncio.get_running_loop()
             ctx = contextvars.copy_context()
-            func_call = functools.partial(ctx.run, voice_main_return, file_name, max_len)
-            await loop.run_in_executor(None, func_call)
+            func_call = functools.partial(ctx.run, voice_main_return, ori_text, max_len)
+            audio_data = await loop.run_in_executor(None, func_call)
 
         if callback:
-            await on_complete(True)
-            return True
+            await callback(True)
+        return audio_data
     except Exception as e:
         print_info(f"语音合成失败: {e}")
         if callback:
-            await on_complete(False, str(e))
-        return False
+            await callback(False, str(e))
+        return None
 
 async def on_complete(success, error=None):
     """异步回调函数"""
@@ -210,9 +265,10 @@ async def on_complete(success, error=None):
 
 if __name__ == "__main__":
     # print(voice_main_return("这是测试的一句话，它不长也不短，只是用于测试闽南语音频合成的效果如何。这是第二句话，用于测试分段功能是否正常工作。如果一切顺利，这段话应该会被分成多个部分，每个部分都不会超过指定的长度限制。"))
-    parser = argparse.ArgumentParser(description='传递参数')
-    parser.add_argument("file_name", type=str)
-    parser.add_argument("--max_len", type=int, default=59)
-    args = parser.parse_args()
-    voice_main_return(args.file_name, args.max_len)  # 传递参数，因为这玩意不需要页面交互，需要多线程实行，所以直接命令行调用
-    print_info("运行结束")
+    # parser = argparse.ArgumentParser(description='传递参数')
+    # parser.add_argument("file_name", type=str)
+    # parser.add_argument("--max_len", type=int, default=59)
+    # args = parser.parse_args()
+    # voice_main_return(args.file_name, args.max_len)  # 传递参数，因为这玩意不需要页面交互，需要多线程实行，所以直接命令行调用
+    # print_info("运行结束")
+    ...

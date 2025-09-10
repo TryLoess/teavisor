@@ -22,15 +22,28 @@ def predict_image(infer, file_name, dst_name, class_names, conf_threshold=0.45):
 def predict_image_use_resize(infer, ori_file, resize_file, dst_name, class_names, conf_threshold=0.45):
     print_info("使用resize预测")
     result_img, boxes, scores, class_ids = infer.base_resize_predict(ori_file, resize_file, conf_threshold=conf_threshold)
-    cv2.imwrite(get_base_dir() + "/data/pic/" + dst_name, cv2.cvtColor(result_img, cv2.COLOR_RGB2BGR))
-    with open(get_base_dir() + "/data/yolo_text.txt", "w", encoding="utf-8") as f:
-        for i, box in enumerate(boxes):
-            class_id = class_ids[i]
-            class_name = class_names[class_id] if class_id < len(class_names) else f"Class {class_id}"
-            print(f"检测到{class_name}置信度为{scores[i]:.2f}在{box}", file=f)
-            print(f"检测到{class_name}置信度为{scores[i]:.2f}在{box}")
+    # cv2.imwrite(get_base_dir() + "/data/pic/" + dst_name, cv2.cvtColor(result_img, cv2.COLOR_RGB2BGR))
+    # with open(get_base_dir() + "/data/yolo_text.txt", "w", encoding="utf-8") as f:
+    res_text = []
+    for i, box in enumerate(boxes):
+        class_id = class_ids[i]
+        class_name = class_names[class_id] if class_id < len(class_names) else f"Class {class_id}"
+        res_text.append(f"检测到{class_name}置信度为{scores[i]:.2f}在{box}")
+        print(f"检测到{class_name}置信度为{scores[i]:.2f}在{box}")
     # return get_base_dir() + "/data/pic/" + dst_name
-    return result_img # cv2.cvtColor(result_img, cv2.COLOR_RGB2BGR)
+    result_img = cv2.cvtColor(result_img, cv2.COLOR_RGB2BGR)
+    _, buffer = cv2.imencode('.jpg', result_img)
+
+    return buffer.tobytes(), "\n".join(res_text) if len(res_text) >= 1 else None # cv2.cvtColor(result_img, cv2.COLOR_RGB2BGR)
+
+def buffer_decode(buffer):
+    if isinstance(buffer, bytes) or (isinstance(buffer, np.ndarray) and buffer.ndim == 1):
+        # 解码 buffer 为图像数组
+        img_array = cv2.imdecode(np.frombuffer(buffer, np.uint8), cv2.IMREAD_COLOR)
+        # 转换为 RGB (Streamlit 期望 RGB 格式)
+        # img_array = cv2.cvtColor(img_array, cv2.COLOR_BGR2RGB)
+        return img_array
+    raise ValueError("未知的buffer格式")
 
 def preprocess(image_path):
     """
