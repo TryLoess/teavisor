@@ -492,6 +492,7 @@ def main_chat_dialog():
                 st.session_state.messages[-1]["pic"] = copy.deepcopy(now_img)
             st.session_state.in_process = True
             st.rerun()
+        st.session_state.prompt = st.session_state.messages[-1]["content"]  # 这里重新赋值，因为st.rerun会将输入内容全部清空，导致rerun之后st.prompt重新赋值，重新赋值就导致信息丢失，这里为None
         assistant_message = st.chat_message("assistant", avatar=head_pic()["assistant"])
         now_img = _get_ont_img()
         if now_img is not None:
@@ -521,20 +522,24 @@ def main_chat_dialog():
             # with show1:
             #     insert_video()
             show2.markdown("<h2>大模型正在思考……</h2>", unsafe_allow_html=True)
-            print_info("等待输出中……")
+            print_info("等待输出中……输入为", st.session_state.prompt)
             full_reply = get_response(st.session_state.prompt, st.session_state.select_model)
+        print_info(os.path.exists(get_base_dir() + "/data/voice/ori_text.txt"))
         with open(get_base_dir() + "/data/voice/ori_text.txt", "w", encoding="utf-8") as f:
             f.write(full_reply)
-        process = subprocess.Popen(
-            f'python -m src.voice "ori_text.txt"',
-            cwd=get_base_dir(),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
+        print_info(os.path.exists(get_base_dir() + "/data/voice/ori_text.txt"))
+        print_info("已写入文本，开始生成语音")
+        # process = subprocess.Popen(
+        #     f'python -m src.voice "ori_text.txt"',
+        #     cwd=get_base_dir(),
+        #     shell=True,
+        # )
+
         # print_info("标准输出:", result.stdout)
         # print_info("标准错误:", result.stderr)
         # print_info("退出码:", result.returncode)
+        thread = voice_main_return_async("ori_text.txt", max_len=59, callback=on_complete)
+
         assistant_message_placeholder.empty()  # 清空内容
 
         random_stream_text(assistant_message_placeholder, full_reply)

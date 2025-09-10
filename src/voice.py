@@ -5,7 +5,7 @@ import io
 import os
 import sys
 import wave
-
+import threading
 import markdown
 import numpy as np
 import streamlit as st
@@ -136,6 +136,7 @@ def _voice_main_return(tex, file_name):
     return response.content
 
 def _merge(voice_dir=get_base_dir() + "/data/voice", dst_path=get_base_dir() + "/data/voice/output_all.wav"):
+    print_info("开始合并音频文件...")
     file_dir = [f for f in os.listdir(voice_dir) if f.endswith(".wav")]
     wav_files = sorted(file_dir, key=lambda x: int(x.split("_")[-1].split(".")[0]))  # 按照数字顺序排序,从小到大
     frames = []
@@ -150,6 +151,7 @@ def _merge(voice_dir=get_base_dir() + "/data/voice", dst_path=get_base_dir() + "
         out_wav.setparams(params)
         for f in frames:
             out_wav.writeframes(f)
+    print_info(f"合并后的音频已保存至{dst_path}")
 
 def get_all_voice(dst_path=get_base_dir() + "/data/voice/output_all.wav"):
     with open(dst_path, "rb") as f:
@@ -173,6 +175,30 @@ def voice_main_return(file_name, max_len=59):
         file_name = f"output_{i}.wav"
         _voice_main_return(segment, file_name)
     _merge()
+
+
+def voice_main_return_async(file_name, max_len=59, callback=None):
+    def run_task():
+        try:
+            voice_main_return(file_name, max_len)
+            print_info("语音合成完成")
+            if callback:
+                callback(True)
+        except Exception as e:
+            print_info(f"语音合成失败: {e}")
+            if callback:
+                callback(False, str(e))
+
+    thread = threading.Thread(target=run_task)
+    thread.daemon = True  # 设置为守护线程，主程序退出时会自动结束
+    thread.start()
+    return thread
+
+def on_complete(success, error=None):
+    if success:
+        print_info("已完成")
+    else:
+        print_info(f"语音合成失败: {error}")
 
 if __name__ == "__main__":
     # print(voice_main_return("这是测试的一句话，它不长也不短，只是用于测试闽南语音频合成的效果如何。这是第二句话，用于测试分段功能是否正常工作。如果一切顺利，这段话应该会被分成多个部分，每个部分都不会超过指定的长度限制。"))
