@@ -179,28 +179,34 @@ def voice_main_return(file_name, max_len=59):
     _merge()
 
 
-def voice_main_return_async(file_name, max_len=59, callback=None):
-    def run_task():
-        try:
-            voice_main_return(file_name, max_len)
-            print_info("语音合成完成")
-            if callback:
-                callback(True)
-        except Exception as e:
-            print_info(f"语音合成失败: {e}")
-            if callback:
-                callback(False, str(e))
+async def voice_main_return_async(file_name, max_len=59, callback=None):
+    """异步执行语音合成任务"""
+    try:
+        # 使用 asyncio.to_thread 将同步函数转为异步执行
+        if int(sys.version.split(".")[1]) >= 9:  # Python 3.9+支持to_thread
+            await asyncio.to_thread(voice_main_return, file_name, max_len)
+        else:  # 3.8及以下版本使用run_in_executor
+            loop = asyncio.get_running_loop()
+            ctx = contextvars.copy_context()
+            func_call = functools.partial(ctx.run, voice_main_return, file_name, max_len)
+            await loop.run_in_executor(None, func_call)
 
-    thread = threading.Thread(target=run_task)
-    thread.daemon = True  # 设置为守护线程，主程序退出时会自动结束
-    thread.start()
-    return thread
+        if callback:
+            await on_complete(True)
+            return True
+    except Exception as e:
+        print_info(f"语音合成失败: {e}")
+        if callback:
+            await on_complete(False, str(e))
+        return False
 
-def on_complete(success, error=None):
+async def on_complete(success, error=None):
+    """异步回调函数"""
     if success:
         print_info("已完成")
     else:
         print_info(f"语音合成失败: {error}")
+
 
 if __name__ == "__main__":
     # print(voice_main_return("这是测试的一句话，它不长也不短，只是用于测试闽南语音频合成的效果如何。这是第二句话，用于测试分段功能是否正常工作。如果一切顺利，这段话应该会被分成多个部分，每个部分都不会超过指定的长度限制。"))

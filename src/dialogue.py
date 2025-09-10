@@ -16,7 +16,7 @@ from .chat_ai import *
 from .chat_ai_openai import OpenaiResponse
 from .config import *
 from .utils import *
-from .voice import *
+from .voice import _merge, get_all_voice, voice_main_return_async, voice_main_write, on_complete
 from .yolo_infer import InferYOLO, resize_image, predict_image_use_resize
 
 
@@ -78,14 +78,13 @@ def create_location(location_dict):
         st.markdown("---")
 
 
-async def random_stream_text_asynic(ai, text, speed_range=(0.002, 0.06)):
+async def random_stream_text_async(ai, text, speed_range=(0.002, 0.06)):
     min_speed, max_speed = speed_range
     total = ""
     for char in text:
         total += char
         ai.write(total)  # 模拟流式输出
         await asyncio.sleep(random.uniform(min_speed, max_speed))  # 异步睡眠
-    st.session_state.messages.append({"role": "assistant", "content": text})
 
 def random_stream_text(ai, text, speed_range=(0.002, 0.06)):
     min_speed, max_speed = speed_range
@@ -96,6 +95,13 @@ def random_stream_text(ai, text, speed_range=(0.002, 0.06)):
         time.sleep(random.uniform(min_speed, max_speed))  # 异步睡眠
         # 这个是线程阻塞的
 
+async def get_all_task(ai, text, file_name="ori_text.txt", speed_range=(0.002, 0.06), max_len=60):    # 创建两个任务并等待它们都完成
+    task1 = asyncio.create_task(voice_main_return_async(file_name, max_len, on_complete))
+    task2 = asyncio.create_task(random_stream_text_async(ai, text, speed_range))
+
+    # 等待所有任务完成
+    results = await asyncio.gather(task1, task2)
+    return all(results)  # 如果所有任务都成功返回True，否则返回False
 
 def create_select_model():
     st.markdown("""
@@ -538,19 +544,26 @@ def main_chat_dialog():
         # print_info("标准输出:", result.stdout)
         # print_info("标准错误:", result.stderr)
         # print_info("退出码:", result.returncode)
-        thread = voice_main_return_async("ori_text.txt", max_len=59, callback=on_complete)
-
         assistant_message_placeholder.empty()  # 清空内容
+        asyncio.run(get_all_task(assistant_message_placeholder, full_reply, "ori_text.txt"))
 
-        random_stream_text(assistant_message_placeholder, full_reply)
+
+        # random_stream_text(assistant_message_placeholder, full_reply)
 
         voice_assistant = assistant_message.empty()
+        length = len(split_str_length(full_reply))
         while True:
             if os.path.exists(get_base_dir() + "/data/voice/output_all.wav"):
                 voice_assistant.empty()  # 清空内容
                 break
             else:
-                voice_assistant.info("正在生成语音播报，请稍等")
+                voice_list = [i for i in os.listdir(get_base_dir() + "/data/voice") if i.endswith(".wav") and i != "output_all.wav"]
+                if len(voice_list) == length:
+                    _merge()  # 如果够了直接合并音频
+                    break
+                else:
+                    voice_assistant.empty()
+                    voice_assistant.info(f"正在生成语音...已完成{len(voice_list)}/{length}")
             time.sleep(5)
         voice_assistant.audio(get_all_voice(), format="audio/wav")
         st.session_state.messages.append({"role": "assistant", "content": full_reply})
