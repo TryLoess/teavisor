@@ -274,7 +274,14 @@ def get_response(prompt, model, use_star=True):
         else:
             return "疑似服务器出现问题，麻烦联系管理员"
     else:
-        return "当前模型还在微调，未来将会接入该网站~请先调整回联网Agent模式进行使用"
+        now_img = _get_ont_img()
+        if now_img is not None:
+            response = cache_openai().process_tea_disease_image(prompt + (f"图片进行yolo识别的结果如下{st.session_state.yolo_text}" if st.session_state.yolo_text is not None else ""), st.session_state.location,
+                                                              file=st.session_state.yolo_pic,
+                                                              )
+        else:
+            response = cache_openai().only_text(prompt, st.session_state.location)
+        return response
 
 # def insert_video():
 #     file_path = get_base_dir() + "/data/loading.mp4"

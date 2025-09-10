@@ -121,7 +121,7 @@ class OpenaiResponse:
         输入文件位置，转换陈base64并进行图文理解
         """
         if sys_prompt is None:
-            sys_prompt = self.disease_prompt + " 请查看图片，识别这是哪种茶树病害，并结合天气信息提供防治建议，需要指明使用的方法等。请使用简单明了，通俗易懂的中文回答,使得文化程度不高的人也能看懂。"
+            sys_prompt = self.disease_prompt + " 请查看图片，识别这是哪种茶树病害，并列出具体的病虫害表现。并结合天气信息提供防治建议，需要指明使用的方法等。请使用通俗易懂的中文回答，保持内容简单明了且精炼,使得文化程度不高的人也能看懂。"
         # 创建基本的openai，TODO：apikay需要修改
 
         base64_img, file_ext = base64_encode(file_path=file_path, file=file)
