@@ -7,3 +7,4 @@ SpeechRecognition==3.14.3
 bs4==0.0.2
 markdown==3.8
 streamlit_modal==0.1.2
+sounddevice==0.5.2

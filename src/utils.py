@@ -1,10 +1,32 @@
 import inspect
 import os
 import base64
-
+import asyncio
 from PIL import Image
 import io
 import numpy as np
+import sys
+
+async def tran_sync_to_async(sync_func, *args, **kwargs):
+    """将同步函数转换为异步函数"""
+    version = sys.version_info.minor
+    if version >= 9:
+        return await asyncio.to_thread(sync_func, *args, **kwargs)
+    else:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, lambda: sync_func(*args, **kwargs))
+
+async def multiple_tasks(sync_func_list):
+    tasks = []
+    for sync_func, args in sync_func_list:
+        task = tran_sync_to_async(sync_func, *args)
+        tasks.append(task)
+
+    # 并发执行所有任务
+    results = await asyncio.gather(*tasks)
+    return results
+
+
 
 def split_str_length(ori_text, max_len=59):
     chinese_punctuations = [

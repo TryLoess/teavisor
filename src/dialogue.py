@@ -175,6 +175,9 @@ def create_select_model():
 def head_pic():
     return {"assistant": get_img_array("bot_head.png"),
             "user": get_img_array("user_head2.jpg")}
+@st.cache_resource
+def cache_request_response():
+    return AllResponse()
 
 @st.cache_resource
 def cache_model():
@@ -359,7 +362,7 @@ def main_chat_dialog():
     if "messages" not in st.session_state:
         st.session_state.messages = []
     if "base_response" not in st.session_state:
-        st.session_state.base_response = AllResponse()
+        st.session_state.base_response = None  # 现在已经废弃
     if "disable_text_input" not in st.session_state:
         st.session_state.disable_text_input = True
     if "loading" not in st.session_state:
@@ -468,16 +471,16 @@ def main_chat_dialog():
         else:
             col_11, col22, col33 = st.columns([0.15, 0.7, 0.3])
             with col22:
-                # if st.button("摁下开始录音",
-                #                  help=disable_text,
-                #                  disabled=st.session_state.disable_text_input or st.session_state.in_process,
-                #                  use_container_width=True,
-                #                  ): # TODO： 这里录音功能暂时关闭
-                if st.button("由于服务器问题，录音功能暂时关闭，请使用文字输入",
-                             help=disable_text,
-                             disabled=True,
-                             use_container_width=True,
-                             ):
+                if st.button("点击开始录音",
+                                 help=disable_text,
+                                 disabled=st.session_state.disable_text_input or st.session_state.in_process,
+                                 use_container_width=True,
+                                 ): # TODO： 这里录音功能暂时关闭
+                # if st.button("由于服务器问题，录音功能暂时关闭，请使用文字输入",
+                #              help=disable_text,
+                #              disabled=True,
+                #              use_container_width=True,
+                #              ):
                     st.session_state.user_voice = voice_main_write()
             with col33:
                 if st.button("上传",

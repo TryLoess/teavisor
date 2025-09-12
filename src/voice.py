@@ -6,17 +6,23 @@ import os
 import sys
 import wave
 import threading
+from traceback import print_exc
+
 import markdown
 import numpy as np
 import streamlit as st
 import speech_recognition as sr
 from bs4 import BeautifulSoup
-from streamlit import audio
+import sounddevice as sd
+from playhouse.sqlite_udf import duration
+from scipy.io import wavfile
+import tempfile
 
-from .utils import get_base_dir, print_info, split_str_length
+from .utils import get_base_dir, print_info, split_str_length, tran_sync_to_async
 from .config import *
 import requests
 import argparse
+import time
 
 
 def _get_baidu_access_token(token_name="token"):
@@ -44,10 +50,10 @@ async def m_receive(recognizer, source):
     if int(sys.version.split(".")[1]) < 9:
         loop = asyncio.get_running_loop()  # 先设置一个running_loop
         ctx = contextvars.copy_context()
-        func_call = functools.partial(ctx.run, recognizer.listen, source, timeout=5)
+        func_call = functools.partial(ctx.run, recognizer.listen, source, timeout=5, phrase_time_limit=20)
         task1 = loop.run_in_executor(None, func_call)  # 返回一个协程对象
     else:  # 3.9以上才有to_thread，3.8是没有这个玩意的
-        task1 = asyncio.to_thread(recognizer.listen, source, timeout=5)
+        task1 = asyncio.to_thread(recognizer.listen, source, timeout=5, phrase_time_limit=20)
     task2 = asyncio.create_task(async_show())
     res = await asyncio.gather(task1, task2)  # 这里统一await
     return res  # 这里是[task1返回值, task2返回值]
@@ -60,54 +66,131 @@ async def async_show():
     window.info("请开始讲话……")
     return window
 
+# def voice_main_write():
+#     """进行语音转写"""
+#     recognizer = sr.Recognizer()
+#     with sr.Microphone(sample_rate=16000) as source:
+#         try:
+#             audio_data, temp_window = asyncio.run(m_receive(recognizer, source))
+#             audio_bytes = audio_data.get_wav_data()
+#
+#             # 使用wave模块读取音频数据
+#             with wave.open(io.BytesIO(audio_bytes), 'rb') as wf:
+#                 # 获取音频参数
+#                 n_channels = wf.getnchannels()
+#                 sample_width = wf.getsampwidth()
+#                 framerate = wf.getframerate()
+#                 n_frames = wf.getnframes()
+#                 # 读取原始音频数据
+#                 audio_data = wf.readframes(n_frames)
+#
+#             # 将音频数据转换为numpy数组进行处理
+#             audio_array = np.frombuffer(audio_data, dtype=np.int16)
+#             # 增加音量（乘以1.5相当于增加约3.5dB，可以根据需要调整）
+#             louder_audio_array = np.clip(audio_array * 1.5, -32768, 32767).astype(np.int16)
+#
+#             # 将处理后的数据写入新的BytesIO对象
+#             buffer = io.BytesIO()
+#             with wave.open(buffer, 'wb') as wf:
+#                 wf.setnchannels(n_channels)
+#                 wf.setsampwidth(sample_width)
+#                 wf.setframerate(framerate)
+#                 wf.writeframes(louder_audio_array.tobytes())
+#
+#             buffer.seek(0)
+#
+#             audio_path = get_base_dir() + "/test.wav"
+#             with open(audio_path, "wb") as f:
+#                 f.write(audio_bytes)# buffer.read())
+#             temp_window.empty()
+#             temp_window.info("识别中，请稍候...")
+#             command = get_result_baidu(buffer.read())
+#             temp_window.empty()
+#             return command
+#
+#         except sr.WaitTimeoutError:
+#             st.error("录音超时，请重试。")
+#         except sr.UnknownValueError:
+#             st.error("无法识别语音，请重试。")
+#         except sr.RequestError as e:
+#             st.error(f"语音识别服务出错: {e}")
+async def show_info(window, base_content, times=5):
+    remain = times
+    for _ in range(times):
+        window.info(base_content + f"(剩余{remain}秒)")
+        await asyncio.sleep(1)
+        window.empty()
+        remain -= 1
+
+def _voice_write(duration=5):
+    sample_rate = 16000
+    print_info(duration)
+    audio_array = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=1, dtype=np.int16)
+    sd.wait()  # 等待录音完成
+
+    # 增加音量
+    louder_audio_array = np.clip(audio_array * 1.5, -32768, 32767).astype(np.int16)
+
+    # 将数据写入BytesIO对象以便发送到API
+    buffer = io.BytesIO()
+    with wave.open(buffer, 'wb') as wf:
+        wf.setnchannels(1)  # 单声道
+        wf.setsampwidth(2)  # 16位 = 2字节
+        wf.setframerate(sample_rate)
+        wf.writeframes(louder_audio_array.tobytes())
+
+    buffer.seek(0)
+
+    # 保存测试用音频文件
+    audio_path = get_base_dir() + "/test.wav"
+    with open(audio_path, "wb") as f:
+        f.write(buffer.getvalue())
+    time.sleep(1.3)
+    command = get_result_baidu(buffer.read())
+    return command
+
+async def voice_show(window, duration=5):
+    tasks = [
+        asyncio.create_task(tran_sync_to_async(_voice_write, duration)),
+        asyncio.create_task(show_info(window, "请开始讲话", duration))
+    ]
+    # res = await asyncio.gather(*tasks)
+    done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+
+    first_task = list(done)[0]
+    first_result = first_task.result()
+    if first_result is None:
+        window.empty()
+        window.warning("正在语音识别，请稍后……")
+
+    # 继续等待其他任务
+    if pending:
+        await asyncio.gather(*pending)
+
+    # 收集所有结果
+    all_results = [task.result() for task in tasks]
+    return all_results[0]
+
+
 def voice_main_write():
     """进行语音转写"""
-    recognizer = sr.Recognizer()
-    with sr.Microphone(sample_rate=16000) as source:
-        try:
-            audio_data, temp_window = asyncio.run(m_receive(recognizer, source))
-            audio_bytes = audio_data.get_wav_data()
+    # 采样参数
+    duration = 5  # 录音时长(秒)
+    try:
+        # 显示录音提示
+        temp_window = st.empty()
+        temp_window.warning("请稍后")
+        time.sleep(0.5)
+        temp_window.empty()
+        res = asyncio.run(voice_show(temp_window, duration))
+        print_info(res)
+        temp_window.empty()
 
-            # 使用wave模块读取音频数据
-            with wave.open(io.BytesIO(audio_bytes), 'rb') as wf:
-                # 获取音频参数
-                n_channels = wf.getnchannels()
-                sample_width = wf.getsampwidth()
-                framerate = wf.getframerate()
-                n_frames = wf.getnframes()
-                # 读取原始音频数据
-                audio_data = wf.readframes(n_frames)
-
-            # 将音频数据转换为numpy数组进行处理
-            audio_array = np.frombuffer(audio_data, dtype=np.int16)
-            # 增加音量（乘以1.5相当于增加约3.5dB，可以根据需要调整）
-            louder_audio_array = np.clip(audio_array * 1.5, -32768, 32767).astype(np.int16)
-
-            # 将处理后的数据写入新的BytesIO对象
-            buffer = io.BytesIO()
-            with wave.open(buffer, 'wb') as wf:
-                wf.setnchannels(n_channels)
-                wf.setsampwidth(sample_width)
-                wf.setframerate(framerate)
-                wf.writeframes(louder_audio_array.tobytes())
-
-            buffer.seek(0)
-
-            audio_path = get_base_dir() + "/test.wav"
-            with open(audio_path, "wb") as f:
-                f.write(audio_bytes)# buffer.read())
-            temp_window.empty()
-            temp_window.info("识别中，请稍候...")
-            command = get_result_baidu(buffer.read())
-            temp_window.empty()
-            return command
-
-        except sr.WaitTimeoutError:
-            st.error("录音超时，请重试。")
-        except sr.UnknownValueError:
-            st.error("无法识别语音，请重试。")
-        except sr.RequestError as e:
-            st.error(f"语音识别服务出错: {e}")
+        return res
+    except Exception as e:
+        st.error(f"录音出错: {e}")
+        print_exc()
+        return None
 
 def _voice_main_return(tex, file_name=None):
     """tex结果要小于60"""
