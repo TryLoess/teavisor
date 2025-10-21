@@ -1,6 +1,7 @@
 debug_original.jpg
 debug_input.jpg
-temp.py
+kb_chat/temp.py
 test.wav
 src/__pycache__/
 data/voice
+kb_chat

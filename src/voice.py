@@ -14,9 +14,6 @@ import streamlit as st
 import speech_recognition as sr
 from bs4 import BeautifulSoup
 import sounddevice as sd
-from playhouse.sqlite_udf import duration
-from scipy.io import wavfile
-import tempfile
 
 from .utils import get_base_dir, print_info, split_str_length, tran_sync_to_async
 from .config import *
@@ -65,6 +62,7 @@ async def async_show():
     window.empty()
     window.info("请开始讲话……")
     return window
+
 
 # def voice_main_write():
 #     """进行语音转写"""
@@ -192,32 +190,64 @@ def voice_main_write():
         print_exc()
         return None
 
-def _voice_main_return(tex, file_name=None):
-    """tex结果要小于60"""
-    access_token = _get_baidu_access_token()
-    cloud_url = "http://tsn.baidu.com/text2audio"
-    ex_params = {
-        "tex": tex,
-        "lan": "zh",
-        "cuid": access_token["cuid"],
-        "ctp": 1,
-        "tok": access_token["token"],
-        "per": 4132,
-        "audio_ctrl": {"sampling_rate": 16000},
-        "aue": 6,  # 返回wav
-        "vol": 6,  # 设置音量
-        "spd": 4,  # 语速
+# def _voice_main_return(tex, file_name=None):
+#     """tex结果要小于60"""
+#     access_token = _get_baidu_access_token()
+#     cloud_url = "http://tsn.baidu.com/text2audio"
+#     ex_params = {
+#         "tex": tex,
+#         "lan": "zh",
+#         "cuid": access_token["cuid"],
+#         "ctp": 1,
+#         "tok": access_token["token"],
+#         "per": 4132,
+#         "audio_ctrl": {"sampling_rate": 16000},
+#         "aue": 6,  # 返回wav
+#         "vol": 6,  # 设置音量
+#         "spd": 4,  # 语速
+#
+#     }
+#     response = requests.post(cloud_url, params=ex_params)
+#     print_info(response.status_code)
+#     print_info(response.headers)
+#     if file_name is not None:
+#         if not os.path.exists(get_base_dir() + f"/data/voice"):
+#             os.mkdir(get_base_dir() + f"/data/voice")
+#         with open(get_base_dir() + f"/data/voice/{file_name}", "wb") as f:
+#             f.write(response.content)
+#         print_info(f"输出音频已保存至data/voice/{file_name}")
+#     return response.content
 
-    }
-    response = requests.post(cloud_url, params=ex_params)
-    print_info(response.status_code)
-    print_info(response.headers)
-    if file_name is not None:
-        if not os.path.exists(get_base_dir() + f"/data/voice"):
-            os.mkdir(get_base_dir() + f"/data/voice")
-        with open(get_base_dir() + f"/data/voice/{file_name}", "wb") as f:
-            f.write(response.content)
-        print_info(f"输出音频已保存至data/voice/{file_name}")
+def _voice_main_return(tex, type_):
+    if type_ == "普通话":
+        spkid = 0
+        lanid = 0
+    elif type_ == "闽南语":
+        spkid = 10
+        lanid = 3
+    else:
+        # 尽量以闽南语为默认，让闽南用户只用点击识别即可自动发音
+        spkid = 10
+        lanid = 3
+    url = f"https://tc.talentedsoft.com:58120/ajax/proxy_tts?userid=yhy&spkid={spkid}&lanid={lanid}&token=1234&content={tex}&speed=1&volume=1"
+    headers = {
+    "accept": "*/*",
+    "accept-encoding": "gzip, deflate, br, zstd",
+    "accept-language": "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6",
+    "connection": "keep-alive",
+    "host": "tc.talentedsoft.com:58120",
+    "referer": "https://tc.talentedsoft.com:58120/speech_synthesis",
+    "sec-ch-ua": '"Microsoft Edge";v="141", "Not?A_Brand";v="8", "Chromium";v="141"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"Windows"',
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36 Edg/141.0.0.0"
+}
+    response = requests.get(url, headers=headers, timeout=300)
+    print_info("访问返回代码", response.status_code)
+    print_info("输入的原始内容为：", tex[:100] + ("..." if len(tex) > 100 else ""))
     return response.content
 
 def _merge(voice_dir=get_base_dir() + "/data/voice", dst_path=get_base_dir() + "/data/voice/output_all.wav"):
@@ -282,7 +312,7 @@ def markdown_to_text(md_text):
 #     print_info("所有片段语音合成完成，开始合并...")
 #     _merge()
 
-def voice_main_return(ori_text, max_len=59):
+def voice_main_return(ori_text, max_len=59, type_="闽南语"):
     """将文本按中文标点符号拆分，确保每段不超过最大长度限制，最后返回所有音频的二进制拼接结果"""
     # 常用中文标点符号列表
     ori_text = markdown_to_text(ori_text)
@@ -292,7 +322,8 @@ def voice_main_return(ori_text, max_len=59):
     # 为每个段落生成语音文件
     for i, segment in enumerate(segments):
         # file_name = f"output_{i}.wav"
-        wav_files.append(_voice_main_return(segment))
+        # TODO:这里统一使用厦大语音平台进行语音转文字了
+        wav_files.append(_voice_main_return(segment, type_))
 
     print_info("所有片段语音合成完成，开始合并...")
     return voice_merge(wav_files)
@@ -317,16 +348,16 @@ def voice_main_return(ori_text, max_len=59):
 #         if callback:
 #             await on_complete(False, str(e))
 #         return False
-async def voice_main_return_async(ori_text, max_len=59, callback=None):
+async def voice_main_return_async(ori_text, max_len=59, callback=None, type_="闽南语"):
     """异步执行语音合成任务"""
     try:
         # 使用 asyncio.to_thread 将同步函数转为异步执行
         if int(sys.version.split(".")[1]) >= 9:  # Python 3.9+支持to_thread
-            audio_data = await asyncio.to_thread(voice_main_return, ori_text, max_len)
+            audio_data = await asyncio.to_thread(voice_main_return, ori_text, max_len, type_)
         else:  # 3.8及以下版本使用run_in_executor
             loop = asyncio.get_running_loop()
             ctx = contextvars.copy_context()
-            func_call = functools.partial(ctx.run, voice_main_return, ori_text, max_len)
+            func_call = functools.partial(ctx.run, voice_main_return, ori_text, max_len, type_)
             audio_data = await loop.run_in_executor(None, func_call)
 
         if callback:
@@ -344,6 +375,7 @@ async def on_complete(success, error=None):
         print_info("已完成")
     else:
         print_info(f"语音合成失败: {error}")
+
 
 
 if __name__ == "__main__":

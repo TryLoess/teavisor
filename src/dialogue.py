@@ -95,8 +95,8 @@ def random_stream_text(ai, text, speed_range=(0.002, 0.06)):
         time.sleep(random.uniform(min_speed, max_speed))  # 异步睡眠
         # 这个是线程阻塞的
 
-async def get_all_task(ai, text, speed_range=(0.002, 0.06), max_len=60):    # 创建两个任务并等待它们都完成
-    task1 = asyncio.create_task(voice_main_return_async(text, max_len, on_complete))
+async def get_all_task(ai, text, speed_range=(0.002, 0.06), max_len=389):    # 创建两个任务并等待它们都完成
+    task1 = asyncio.create_task(voice_main_return_async(text, max_len, on_complete, type_=st.session_state.voice_type))
     task2 = asyncio.create_task(random_stream_text_async(ai, text, speed_range))
 
     done, pending = await asyncio.wait([task1, task2], return_when=asyncio.FIRST_COMPLETED)
@@ -395,9 +395,11 @@ def main_chat_dialog():
         st.session_state.user_voice = ""
     if "yolo_text" not in st.session_state:
         st.session_state.yolo_text = None
+    if "voice_type" not in st.session_state:
+        st.session_state.voice_type = "闽南语"
 
     with st.sidebar:
-
+        st.selectbox("语音类型", ["闽南语", "普通话"], index=0, key="voice_type")
         uploader_container = st.empty()
         col1, col2 = uploader_container.columns([1, 1])
         if st.session_state.show_uploader:
@@ -422,6 +424,7 @@ def main_chat_dialog():
                     st.info("当前无图片")
 
         st.markdown("---")
+
         col1, col2 = st.columns([1, 1])
 
         if col1.button("开启新对话", use_container_width=True):
