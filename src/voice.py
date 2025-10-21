@@ -11,9 +11,9 @@ from traceback import print_exc
 import markdown
 import numpy as np
 import streamlit as st
-import speech_recognition as sr
+# import speech_recognition as sr
 from bs4 import BeautifulSoup
-import sounddevice as sd
+# import sounddevice as sd
 
 from .utils import get_base_dir, print_info, split_str_length, tran_sync_to_async
 from .config import *
