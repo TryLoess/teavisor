@@ -16,7 +16,7 @@ from .chat_ai import *
 from .chat_ai_openai import OpenaiResponse
 from .config import *
 from .utils import *
-from .voice import _merge, get_all_voice, voice_main_return_async, voice_main_write, on_complete
+from .voice import _merge, get_all_voice, voice_main_return_async, voice_main_write, on_complete, voice_main_return
 from .yolo_infer import InferYOLO, resize_image, predict_image_use_resize, buffer_decode
 
 
@@ -562,12 +562,14 @@ def main_chat_dialog():
         # print_info("标准错误:", result.stderr)
         # print_info("退出码:", result.returncode)
         assistant_message_placeholder.empty()  # 清空内容
-        audio = asyncio.run(get_all_task(assistant_message_placeholder, full_reply))
-
+        # audio = asyncio.run(get_all_task(assistant_message_placeholder, full_reply))
+        random_stream_text(assistant_message_placeholder, full_reply, speed_range=(0.001, 0.04))
 
         # random_stream_text(assistant_message_placeholder, full_reply)
 
         voice_assistant = assistant_message.empty()
+        with st.spinner("语音生成中，请稍候……"):
+            audio = voice_main_return(full_reply, max_len=389, type_=st.session_state.voice_type)
         # length = len(split_str_length(full_reply))
         # while True:
         #     if os.path.exists(get_base_dir() + "/data/voice/output_all.wav"):
