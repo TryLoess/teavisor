@@ -7,7 +7,6 @@ import subprocess
 import time
 from copy import deepcopy
 from traceback import print_exc
-
 import cv2
 import streamlit as st
 from streamlit_modal import Modal
