@@ -38,12 +38,13 @@ def create_location(location_dict):
     if "location" not in location_dict:
         st.session_state.location = ""
     with st.sidebar:
-        st.markdown("请在此输入茶园所在地")
+        st.markdown("#### 请在此输入茶园所在地\n默认**福建省泉州市安溪县**，请按需修改")
         col1, col2, col3 = st.columns(3)
         sheng = col1.selectbox(
             "省份",
             key="sheng",
-            options=["请选择"] + list(location_dict.keys())
+            options=["请选择"] + list(location_dict.keys()),
+            index=1
         )
         # xian = col2.selectbox(
         #     "市区",
@@ -64,6 +65,7 @@ def create_location(location_dict):
             "市区",
             key="xian",
             options=[] if sheng == "请选择" else ["请选择"] + list(location_dict[sheng].keys()),
+            index=2
         )
         xiang = col3.selectbox(
             "乡县",
@@ -108,9 +110,11 @@ async def get_all_task(ai, text, speed_range=(0.002, 0.06), max_len=389):    # �
 def create_select_model():
     st.markdown("""
     <style>
+    .stMain div[data-testid="stSelectbox"],
     .main div[data-testid="stSelectbox"] {
     position: fixed;   /* 固定定位 */
     top: 4%;         /* 距顶部距离 */
+    font-size: 1em !important;
     # left: 30%;
     z-index: 1000;     /* 确保在最上层 */
     width: 200px !important;  /* 设置宽度 */
@@ -125,12 +129,8 @@ def create_select_model():
     min-height: 30px;  /* 最小高度 */
 }
 
-/* 调整字体大小 */
-   .main div[data-testid="stSelectbox"] {
-    font-size: 1em !important;
-}
-
 /* 调整下拉菜单位置 */
+   .stMain div[data-testid="stSelectbox"] [role="listbox"],
    .main  div[data-testid="stSelectbox"] [role="listbox"] {
     transform: translateY(38px) !important;  /* 下拉菜单位置修正 */
     width: 200px !important;  /* 下拉菜单宽度 */
@@ -399,13 +399,13 @@ def main_chat_dialog():
         st.session_state.voice_type = "闽南语"
 
     with st.sidebar:
-        st.selectbox("语音类型", ["闽南语", "普通话"], index=0, key="voice_type")
+        st.selectbox("#### 请选择语音类型", ["闽南语", "普通话"], index=0, key="voice_type")
         uploader_container = st.empty()
         col1, col2 = uploader_container.columns([1, 1])
         if st.session_state.show_uploader:
             with col1:
                 st.file_uploader(
-                    "请在这里上传茶叶图片",
+                    "#### 请在这里上传茶叶图片",
                     type=["png", "jpg", "jpeg"],
                     key=f"upload_file_{st.session_state.uploader_key}"
                 )
