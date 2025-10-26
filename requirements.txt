@@ -1,3 +1,5 @@
+setuptools
+wheel
 numpy>=1.25.0
 opencv-python==4.11.0.86
 protobuf<=3.20.3
