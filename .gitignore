@@ -5,3 +5,4 @@ test.wav
 src/__pycache__/
 data/voice
 kb_chat
+test_message.wav

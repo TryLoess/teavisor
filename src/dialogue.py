@@ -473,16 +473,16 @@ def main_chat_dialog():
         else:
             col_11, col22, col33 = st.columns([0.15, 0.7, 0.3])
             with col22:
-                # if st.button("点击开始录音",
-                #                  help=disable_text,
-                #                  disabled=st.session_state.disable_text_input or st.session_state.in_process,
-                #                  use_container_width=True,
-                #                  ): # TODO： 这里录音功能暂时关闭
-                if st.button("由于服务器问题，录音功能暂时关闭，请使用文字输入",
-                             help=disable_text,
-                             disabled=True,
-                             use_container_width=True,
-                             ):
+                if st.button("点击开始录音",
+                                 help=disable_text,
+                                 disabled=st.session_state.disable_text_input or st.session_state.in_process,
+                                 use_container_width=True,
+                                 ): # TODO： 这里录音功能暂时关闭
+                # if st.button("由于服务器问题，录音功能暂时关闭，请使用文字输入",
+                #              help=disable_text,
+                #              disabled=True,
+                #              use_container_width=True,
+                #              ):
                     st.session_state.user_voice = voice_main_write()
             with col33:
                 if st.button("上传",

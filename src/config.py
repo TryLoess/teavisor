@@ -56,6 +56,7 @@ CSS = """
           pointer-events: none;
           overflow: hidden;
         }
+        .stMain div[data-testid="stHorizontalBlock"]:has(> div:nth-child(3):nth-last-child(1)),
         .main div[data-testid="stHorizontalBlock"]:has(> div:nth-child(3):nth-last-child(1)) {  /* 使用has进行条件判断，>div代表其下的所有div元素，既是第3个child，也是最后一个child说明只有三个元素 */
             position: fixed;
             bottom: 0;
@@ -66,6 +67,7 @@ CSS = """
             /* box-shadow: 0 -2px 8px rgba(0,0,0,0.1); */
         }
         /* 让按钮在水平Block中保持水平排列 */
+        .stMain div[data-testid="stHorizontalBlock"] div[data-testid="column"],
         .main div[data-testid="stHorizontalBlock"] div[data-testid="column"] {
             position: static !important;
             box-shadow: none;
